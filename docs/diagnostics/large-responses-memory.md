@@ -48,3 +48,25 @@ Reading Linux PSI/swap counters alongside traces can distinguish memory reclaim 
 Deployment uses a uniquely named backup of the existing executable and a dedicated systemd drop-in `90-memdiag.conf`. Verify SHA-256 on the staged executable before replacing it, restart, and verify `/health`, the embedded UI and reported build identity. Database migrations are unchanged from the prior deployed source commit.
 
 To disable capture, remove only the diagnostic drop-in, run `systemctl daemon-reload`, then restart `sub2api`. To roll back the binary, restore the exact pre-diagnostic backup recorded in the deployment record before that restart. Preserve collected profiles for analysis. Do not delete unrelated drop-ins or change the production request size/swap settings.
+
+## Verified deployment: 2026-10-08 01:46 Asia/Shanghai
+
+- Host: `47.90.210.138`; service `sub2api.service`, port 8080.
+- Build: `0.2.14-memdiag.1`, source commit `14afb7214` (diagnostic branch).
+- Executable: `/opt/sub2api/sub2api`; SHA-256 `6fc7daf6966aa485327df52f11a14bb001efd84997f08aa4b7a2c80533ce2934` matched the local artifact and `/proc/16931/exe` immediately after deployment.
+- Backup: `/opt/sub2api/sub2api.pre-memdiag-20261008-14afb7214`; SHA-256 `657c046f7f32405de21b1494b4cfd77849340616044a82ea963c14d3e163a6a3`.
+- Drop-in: `/etc/systemd/system/sub2api.service.d/90-memdiag.conf`; the three environment values above verified in the running process.
+- `/health` and `/` returned HTTP 200, service active, NRestarts=0. No diagnostic captures yet at verification. No synthetic large requests sent to the server.
+- Full service and handler unit suites passed (185.703s / 39.431s); memdiag race test passed; enabled local HTTP handler smoke test wrote readable heap profiles. Frontend frozen dependency install and full build passed using pnpm 9.15.9. Root disk was not used for dependency/build caches.
+- Local binary: `backend/bin/sub2api-memdiag` (158 MiB, ignored artifact). The local missing `go tool pprof` was built from the installed toolchain's own `src/cmd/pprof` sources and tested against a generated profile.
+
+Exact rollback commands on this host (interrupts active requests on restart):
+
+```sh
+cp -p /opt/sub2api/sub2api.pre-memdiag-20261008-14afb7214 /opt/sub2api/sub2api.rollback-tmp
+mv /opt/sub2api/sub2api.rollback-tmp /opt/sub2api/sub2api
+rm /etc/systemd/system/sub2api.service.d/90-memdiag.conf
+systemctl daemon-reload
+systemctl restart sub2api
+curl -fsS http://127.0.0.1:8080/health
+```
