@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/memdiag"
 	"io"
 	"net/http"
 	"sort"
@@ -135,6 +136,9 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	reqStream bool,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
+	diag := memdiag.From(c.Request.Context())
+	diag.Stage("passthrough_begin", len(body))
+	defer func() { diag.Stage("passthrough_end", len(body)) }()
 	requestedModel := reqModel
 	upstreamPassthroughModel := ""
 	if isOpenAIResponsesCompactPath(c) {
@@ -367,8 +371,10 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		}
 		SetOpsUpstreamModel(c, actualModel)
 		upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
+		diag.Stage("passthrough_build_begin", len(body))
 		upstreamReq, buildErr := s.buildUpstreamRequestOpenAIPassthrough(upstreamCtx, c, account, body, token)
 		releaseUpstreamCtx()
+		diag.Stage("passthrough_build_end", len(body))
 		if buildErr != nil {
 			return nil, buildErr
 		}

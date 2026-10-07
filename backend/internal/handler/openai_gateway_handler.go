@@ -7,6 +7,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/memdiag"
 	"io"
 	"net/http"
 	"runtime/debug"
@@ -418,8 +419,25 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 
+	// Temporary opt-in diagnostics; only selected large HTTP Responses requests.
+	finishTracking := memdiag.Track()
+	defer finishTracking()
+	diagCtx, diag := memdiag.Begin(c.Request.Context(), c.Request.ContentLength)
+	c.Request = c.Request.WithContext(diagCtx)
+	defer func() { diag.End() }()
 	// Read request body
 	body, err := readLenientJSONRequestBodyWithPrealloc(c.Request, h.cfg)
+	if diag == nil && err == nil {
+		diagCtx, diag = memdiag.Begin(c.Request.Context(), int64(len(body)))
+		c.Request = c.Request.WithContext(diagCtx)
+	}
+	if diag != nil {
+		reqLog.Info("memdiag.selected", zap.String("trace_id", diag.ID()))
+		diag.Stage("handler_body_ready", len(body))
+		if err == nil {
+			diag.Body(body)
+		}
+	}
 	if err != nil {
 		if maxErr, ok := extractMaxBytesError(err); ok {
 			h.errorResponse(c, http.StatusRequestEntityTooLarge, "invalid_request_error", buildBodyTooLargeMessage(maxErr.Limit))

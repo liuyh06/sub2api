@@ -6,6 +6,7 @@ import (
 	"compress/zlib"
 	"errors"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/memdiag"
 	"io"
 	"net/http"
 	"strings"
@@ -68,6 +69,7 @@ func ReadRequestBodyWithPrealloc(req *http.Request) ([]byte, error) {
 		return nil, nil
 	}
 	if preread, ok := req.Body.(*PrereadBody); ok {
+		memdiag.From(req.Context()).Stage("body_preread", len(preread.Bytes()))
 		return preread.Bytes(), nil
 	}
 
@@ -83,7 +85,9 @@ func ReadRequestBodyWithPrealloc(req *http.Request) ([]byte, error) {
 		}
 	}
 
+	memdiag.From(req.Context()).Stage("body_read_begin", 0)
 	raw, err := readRequestBodyChunks(req.Body, capHint, req.ContentLength)
+	memdiag.From(req.Context()).Stage("body_read_end", len(raw))
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +166,14 @@ func ReadLenientJSONRequestBodyWithPrealloc(req *http.Request, maxNormalizedByte
 	if err != nil {
 		return nil, err
 	}
-	return NormalizeLenientJSONRequestBody(body, maxNormalizedBytes)
+	var diag *memdiag.Trace
+	if req != nil {
+		diag = memdiag.From(req.Context())
+	}
+	diag.Stage("normalize_json_begin", len(body))
+	out, err := NormalizeLenientJSONRequestBody(body, maxNormalizedBytes)
+	diag.Stage("normalize_json_end", len(out))
+	return out, err
 }
 
 func decompressRequestBody(encoding string, raw []byte) ([]byte, error) {
