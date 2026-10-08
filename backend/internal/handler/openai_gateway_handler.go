@@ -497,7 +497,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	} else if changed {
 		body = cappedBody
 	}
+	diag.Stage("before_bootstrap_normalize", len(body))
 	body, automationChanged, delegationChanged := normalizeCodexBootstrapKinds(body, true, true)
+	diag.Stage("after_bootstrap_normalize", len(body))
 	if automationChanged {
 		reqLog.Info("openai.codex_automation_bootstrap_normalized", zap.String("normalization", "call_output_to_user_message"))
 	}

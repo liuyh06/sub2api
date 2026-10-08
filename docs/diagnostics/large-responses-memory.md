@@ -1,4 +1,4 @@
-# Temporary large HTTP Responses memory diagnostics
+# Deployment branch and bounded HTTP Responses memory diagnostics
 
 This diagnostic branch includes the namespace allocation fix from PR #7910. It is not part of that PR. It observes natural traffic; it does not replay production requests, record request bodies or expose a pprof HTTP endpoint.
 
@@ -70,3 +70,18 @@ systemctl daemon-reload
 systemctl restart sub2api
 curl -fsS http://127.0.0.1:8080/health
 ```
+
+## Ongoing deployment workflow
+
+`codex/diagnose-large-request-memory` is the persistent integration/deployment branch for this fork. Keep upstream PR work on separate feature branches; do not add deployment diagnostics to those PRs.
+
+For each rollout:
+
+1. Start from a clean deployment branch and record the currently running binary hash and source/build identity.
+2. Integrate only the reviewed feature commits. Use `git cherry-pick -x` when a PR branch is based on newer upstream history, so unrelated upstream changes do not enter production implicitly. Use a normal merge when its complete history is intentionally being deployed. Upstream upgrades are separate, explicitly scoped changes.
+3. Keep namespace/bootstrap improvements and bounded diagnostics together. Run affected tests and lint on the combined branch; build the embedded UI with pnpm 9.15.9 and build the Go binary with source commit, version, and timestamp.
+4. Preserve a uniquely named binary backup and the exact prior diagnostic drop-in. Stage the new binary, verify its hash, replace atomically, restart, and verify process executable hash, health, UI/assets, and build identity. A failed health check triggers rollback to the saved binary and drop-in.
+5. Use a separate capture directory per deployment; retain previous captures. The existing per-process three-request budget, size threshold, cooldown, and privacy boundaries remain in effect. Observe natural traffic instead of sending large synthetic production requests.
+6. Record deployment evidence and rollback instructions in this document and push the deployment branch to the fork. Updating a feature PR does not automatically deploy it.
+
+The bootstrap rollout additionally records `before_bootstrap_normalize` and `after_bootstrap_normalize`. These values remain process-wide and may include concurrent work and diagnostic overhead. Compare them with heap profiles and request shape, not as isolated per-request RSS measurements.
