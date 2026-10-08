@@ -85,3 +85,30 @@ For each rollout:
 6. Record deployment evidence and rollback instructions in this document and push the deployment branch to the fork. Updating a feature PR does not automatically deploy it.
 
 The bootstrap rollout additionally records `before_bootstrap_normalize` and `after_bootstrap_normalize`. These values remain process-wide and may include concurrent work and diagnostic overhead. Compare them with heap profiles and request shape, not as isolated per-request RSS measurements.
+
+## Verified bootstrap deployment: 2026-10-08 16:05 Asia/Shanghai
+
+- Persistent deployment branch: `codex/diagnose-large-request-memory`, pushed to `origin` (the user's fork).
+- Integrated bootstrap PR #7928 commit `3d7c4a253` as `56a6cb16e` with source attribution; no unrelated upstream updates or database/schema changes were included.
+- Build: `0.2.14-memdiag.2`, source commit `0a23b085f0a54d70f699fe103f3bd20363b4e8e1`, built at `2026-10-08T08:01:39Z` with embedded frontend. Later documentation-only commits do not change this binary's source identity.
+- Host/service: `47.90.210.138`, `sub2api.service`; verified PID `41873`, active/running, NRestarts=0.
+- SHA-256 of local binary, installed binary, and `/proc/41873/exe`: `e3ed84f49520f2289e17830466d80e3c1bda15111c0992c27bab6e6833e7322d`.
+- Prior binary backup: `/opt/sub2api/sub2api.pre-bootstrap-20261008-0a23b085f`, SHA-256 `6fc7daf6966aa485327df52f11a14bb001efd84997f08aa4b7a2c80533ce2934` (memdiag.1).
+- Prior diagnostic configuration backup: `/opt/sub2api/memdiag-before-20261008-0a23b085f.conf`.
+- New capture directory: `/opt/sub2api/data/memdiag-bootstrap-20261008-0a23b085f`; enabled flag and 16777216-byte threshold were verified in the running process. All previous capture files remain preserved.
+- Health, embedded UI, and JS asset returned HTTP 200. The served `index-Cy7elDOu.js` hash matched the local asset: `1ad3f3eecf494a99f30a91512057a26d33b401c0885a2dc895024e6a5ef94b91`.
+- Combined deployment-branch handler/memdiag unit tests passed (40.618s / 0.004s); complete backend lint v2.13.0 passed with 0 issues; pnpm 9.15.9 frozen dependency install and full frontend build passed (only bundle-size advisory warnings).
+- Immediately after verification: no selected large requests or new profiles yet, and no panic/fatal markers from the new PID. MemorySwapCurrent=0 after restart is not proof of optimization benefit; compare equivalent natural traffic and process-wide profiles before drawing conclusions.
+- Local artifacts and before/after evidence: `backend/bin/deploy-bootstrap-20261008/` (ignored).
+
+Rollback to memdiag.1 on this host:
+
+```sh
+cp -p /opt/sub2api/sub2api.pre-bootstrap-20261008-0a23b085f /opt/sub2api/sub2api.rollback-bootstrap
+mv /opt/sub2api/sub2api.rollback-bootstrap /opt/sub2api/sub2api
+cp -p /opt/sub2api/memdiag-before-20261008-0a23b085f.conf /etc/systemd/system/sub2api.service.d/90-memdiag.conf
+systemctl daemon-reload
+systemctl restart sub2api
+curl -fsS http://127.0.0.1:8080/health
+sha256sum /opt/sub2api/sub2api
+```
